@@ -37,6 +37,8 @@ _FBORPOR(MCLR_DIS);              // Disable reset pin
 #define MAX_CPR 1068
 #define FCY 30000000ULL
 #define RESOLUTION_RPM 75
+#define FREQ_PWM 29296
+#define DEAD_TIME 0
 
 // FUNCTIONS
 void Delay_Milli_Sec(unsigned int n);
@@ -46,11 +48,14 @@ void Send_Nibble(unsigned char nibble);
 void Send_Command_Byte(unsigned char byte);
 void Send_Data_Byte(unsigned char byte);
 
-void Initialize(void);
+void InitPins(void);
 void InitQEI(void);
 void InitTMR1(void);
 void InitTMR2(void);
 void InitTMR3(void);
+void InitPWM(void);
+void InitLCD(void);
+void InitAD(void);
 
 void Get_Motor_Position(void);
 void Get_RPM(void);
@@ -62,6 +67,8 @@ unsigned int Read_Analog_Channel1(int v);
 void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt (void);
 void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt (void);
 void __attribute__((__interrupt__, __auto_psv__)) _T3Interrupt (void);
+void __attribute__((__interrupt__, __auto_psv__)) _QEIInterrupt(void);
+void __attribute__((__interrupt__, __auto_psv__)) _PWMInterrupt(void);
 
 // GLOBAL VARIABLES
 double rpm_MOTOR = 0;
@@ -104,11 +111,14 @@ int main()
     
     char print_line1[8], print_line2[8];
     
-    Initialize();
-    InitQEI();
+    InitPins();
     InitTMR1();    
     InitTMR3();
     InitTMR2();
+    InitLCD();
+    InitAD();
+    InitQEI();
+    InitPWM();
 
 //------------------------------------------------------------------------------
 //                            LOOP FOREVER
@@ -415,9 +425,9 @@ void Get_RPM(void)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void Initialize(void)
+void InitPins(void)
 {
-    // PORTS
+    // PINS
     TRISD = 0b0001; // RD1-3: Outputs, RD0: Input (18,22,19,23) LCD / Reset
     TRISB = 0xFF78; // RB0-2,RB7: Outputs - LCD (2,3,4,9)
     _TRISF0 = 0;    // RF0: Output - Green LED (30)
@@ -425,11 +435,14 @@ void Initialize(void)
     _TRISC13 = 0;   // RC13: Digital Output - UltraSonic Trigger (15)
     _TRISC14 = 1;   // RC14: Input - UltraSonic Echo (16)
     TRISBbits.TRISB8 = 1;    // RB8: Input - Reset Variables on LCD (10)
+    TRISE = 0;      // Set PWM pins as Outputs
+    
+    return;
 
-    // OC1 - Output Compare Channel 1
-//    OC1CONbits.OCM = 0b101; // Continuous Pulse
-//    OC1R = 0;               // Pulse Start
-//    OC1RS = 65000;          // Pulse Stop
+}
+
+void InitAD(void)
+{
 
     // Configure A/D Converter
     //ADPCFG = 0xFFBF;         // AN6: Input - Accelerometer - Z Direction (8)
@@ -445,7 +458,13 @@ void Initialize(void)
     ADCON1bits.ADON = 1; // Turn ADC ON
 
     //ADCON1bits.SSRC = 0b011; // Motor Control PWM interval stats/ends conversion
-    
+
+    return;
+
+}
+
+void InitLCD(void)
+{
     // Setup LCD
     RW_PIN = 0;
     RS_PIN = 0;
@@ -558,6 +577,26 @@ void InitQEI(void)
 
 }
 
+void InitPWM(void)
+{
+    PTCON = 0;          // Timer Off, No-Scaling, FreeRun Mode, Runs in Idle
+    OVDCON = 0;         // Disable all PWM outputs
+    PTMR = 0;           // Timer counts up, Clears timer register
+    PTPER = 1024;       // PWM timer for 30MIPS @ 29.296 kHZ
+    PWMCON1 = 0x0033;   // Set CH. 1 & 2 to PWM and make Complementary
+    DTCON1 = 0;         // Sets Dead Time to 0 with no Pre-Scalers
+    OVDCON = 0x0F00;    // Output is controlled by PWM Generator
+    PDC1 = PTPER;       // Sets PWM1 Duty Cycle to 100%
+    PDC2 = PTPER/2;     // Sets PWM2 Duty Cycle to 50%
+//    IFS2bits.PWMIF = 0; // Clear PWM Interrupt
+//    IEC2bits.PWMIE = 1; // Enable PWM Interrupts
+//    SEVTCMPbits.SEVTDIR = 0; // Special Event Trigger Compared to PTMR
+    PTCONbits.PTEN = 1; // Timer On
+
+    return;
+
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 //                             INTERRUPTS
@@ -566,6 +605,8 @@ void InitQEI(void)
 
 void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt (void)
 {
+
+    IFS0bits.T1IF = 0; // Clear TMR1 Interrupt Flag
 
     return;
 
@@ -623,4 +664,14 @@ void __attribute__((__interrupt__, __auto_psv__)) _QEIInterrupt(void)
 
      return;
 
+}
+
+// PWM INTERRUPT
+void __attribute__((__interrupt__, __auto_psv__)) _PWMInterrupt(void)
+{
+
+    IFS2bits.PWMIF = 0; // Clear PWM Interrupt
+
+    return;
+    
 }
