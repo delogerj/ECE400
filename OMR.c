@@ -56,6 +56,7 @@ void Get_Motor_Position(void);
 void Get_RPM(void);
 int  Get_Digits(int n);
 unsigned int Read_Analog_Channel(int v);
+unsigned int Read_Analog_Channel1(int v);
 
 // INTERRUPTS
 void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt (void);
@@ -65,11 +66,14 @@ void __attribute__((__interrupt__, __auto_psv__)) _T3Interrupt (void);
 // GLOBAL VARIABLES
 double rpm_MOTOR = 0;
 double ang_MOTOR[3] = {0,0,0};
+double current_MOTOR = 0;
+
 double avg_RPM[100] = {0};
 double dist_IN = 0;
 //double dist_CM = 0;
 double deg_LIFT_BAR = 0;
-double data_ACCEL = 0;
+unsigned int data_ACCEL = 0;
+unsigned int data_CURRENT = 0;
 
 int count_ENCODER = 0;
 int ang_POS[2] = {0,0};
@@ -112,13 +116,14 @@ int main()
 
     while(1)
     {
+
         // Check user input to select which display to be shown on LCD
         if ((PORTDbits.RD0 == 0) && (debounce == 1))
            debounce = 0;
 
         if ((PORTDbits.RD0 == 1) && (debounce == 0))
         {
-           if(user_input == 5)
+           if(user_input == 6)
                user_input = 0;
            else
             user_input++;
@@ -126,6 +131,7 @@ int main()
            debounce = 1;
         }
 
+        // Delay printing to LCD, then print user input
         if (delay_lcd >= 30000)
         {
             delay_lcd = 0;
@@ -137,6 +143,7 @@ int main()
                    count_ENCODER = 0;
                }
 
+            // Dependent on user input (button press) for LCD display
             switch (user_input)
             {
                 case 0:
@@ -210,20 +217,20 @@ int main()
                         for (i=0 ; i<total_digits ; ++i) {Send_Data_Byte(print_line2[i]);}
                         for (i=total_digits ; i<8 ; ++i) {Send_Data_Byte(print_line2[i] = ' ');}
                 break;
-            }
+            
 
-    //        case 6:
-    //            sprintf(print_line1, "%s", "ENTER HERE");
-    //                Send_Command_Byte(GO_LINE1);
-    //                for (i=0 ; i<8 ; ++i) {Send_Data_Byte(print_line1[i]);}
-    //
-    //            sprintf(print_line2, "%f", "ENTER HERE");
-    //                total_digits = Get_Digits(ENTER HERE);
-    //                Send_Command_Byte(GO_LINE2);
-    //                for (i=0 ; i<total_digits+2 ; ++i) {Send_Data_Byte(print_line2[i]);}
-    //                for (i=total_digits+2 ; i<8 ; ++i) {Send_Data_Byte(print_line2[i] = ' ');}
-    //        break;
-    //      }
+            case 6:
+                sprintf(print_line1, "%s", "Mot Curr");
+                    Send_Command_Byte(GO_LINE1);
+                    for (i=0 ; i<8 ; ++i) {Send_Data_Byte(print_line1[i]);}
+    
+                sprintf(print_line2, "%f", current_MOTOR);
+                    total_digits = Get_Digits(current_MOTOR);
+                    Send_Command_Byte(GO_LINE2);
+                    for (i=0 ; i<total_digits+2 ; ++i) {Send_Data_Byte(print_line2[i]);}
+                    for (i=total_digits+2 ; i<8 ; ++i) {Send_Data_Byte(print_line2[i] = ' ');}
+            break;
+          }
 
                 // System Activated
                 if (deg_LIFT_BAR>20)
@@ -255,9 +262,9 @@ unsigned int Read_Analog_Channel(int channel)
 {
 	ADCHS = channel;            // Select Channel
 	ADCON1bits.SAMP = 1;        // Start Sampling
-	Delay_Micro_Sec(1);       
+	Delay_Micro_Sec(1);
 	ADCON1bits.SAMP = 0;        // Start Converting
-	while (!ADCON1bits.DONE);   // 1.2us : 12*Tad
+	while (!ADCON1bits.DONE);   // 1.98us : 12*Tad
 
         return ADCBUF0;
 
@@ -420,24 +427,25 @@ void Initialize(void)
     TRISBbits.TRISB8 = 1;    // RB8: Input - Reset Variables on LCD (10)
 
     // OC1 - Output Compare Channel 1
-    OC1CONbits.OCM = 0b101; // Continuous Pulse
-    OC1R = 0;               // Pulse Start
-    OC1RS = 65000;          // Pulse Stop
+//    OC1CONbits.OCM = 0b101; // Continuous Pulse
+//    OC1R = 0;               // Pulse Start
+//    OC1RS = 65000;          // Pulse Stop
 
     // Configure A/D Converter
-    ADPCFG = 0xFFBF;     // RB6: Input - Accelerometer - Z Direction (8)
-    ADPCFG |= 0x0030;    // QEA,QEB: Inputs - Encoder (6,7)
-    ADCON1 = 0;          // Start Conversion
-    ADCON2 = 0;          // AVDD and AVSS - Voltage Reference
-    
+    //ADPCFG = 0xFFBF;         // AN6: Input - Accelerometer - Z Direction (8)
+    //ADPCFG |= 0x0030;        // QEA,QEB: Inputs - Encoder (6,7)
+    ADPCFGbits.PCFG6 = 0;
+    ADPCFGbits.PCFG4 = 1;
+    ADPCFGbits.PCFG5 = 1;
+    ADPCFGbits.PCFG3 = 0;    // AN3: Input - Current Monitor (5)
+    ADCON1 = 0;              // Start Conversion
+    ADCON2 = 0;              // AVDD and AVSS - Voltage Reference
     // DO NOT WRITE ADCS WHILE ADON = 1!
-    ADCON3 = 0x0005;     // ADCS=5 -> Tad = 3*Tcy = 0.1us
+    ADCON3 = 0x0009;     // ADCS=9 -> Tad = 5*Tcy = 165ns
     ADCON1bits.ADON = 1; // Turn ADC ON
 
-//    _PCFG0 = 1; // AN0 is digital
-//    _PCFG1 = 1; // AN1 is digital
-//    _PCFG8 = 0; // AN8 is Analog
-
+    //ADCON1bits.SSRC = 0b011; // Motor Control PWM interval stats/ends conversion
+    
     // Setup LCD
     RW_PIN = 0;
     RS_PIN = 0;
@@ -576,13 +584,19 @@ void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt (void)
     while(_RC14 == 1);      // Receive Signal
     data_SOUND = TMR2;      // Return Time Taken
 
+    // Get Position from Ultra Sonic
     dist_IN = data_SOUND/16.8;
     // dist_IN = (((data_SOUND * 8.533us * 340m/s)/2)*39.3701in/m) or 0.5711 * data_SOUND
     // dist_CM = data_SOUND/6.61417; // @84 : 84 = 5" = 12.7 cm
 
+    // Get Current Flow to Motor
+    data_CURRENT = Read_Analog_Channel(3);
+    current_MOTOR = (data_CURRENT * 0.22727);
+    
+    // Get Angle of Lifting Bar
     data_ACCEL = Read_Analog_Channel(6);
     deg_LIFT_BAR = (data_ACCEL/1.57)-184;
-    
+
     return;
 
 }
