@@ -41,7 +41,7 @@ _FBORPOR(MCLR_DIS);              // Disable reset pin
 #define RW_PIN _LATD3   // LCD Read/Write Pin
 #define GO_LINE1 0x02
 #define GO_LINE2 0xC0
-#define RESET_LCD PORTBbits.RB8
+#define RESET_LCD PORTFbits.RF5
 #define MAX_USER_INPUTS 7
 
 // MOTOR
@@ -56,7 +56,7 @@ _FBORPOR(MCLR_DIS);              // Disable reset pin
 #define DEAD_TIME _DTA      // Set in intialization of PWM
 
 // ACCELEROMETER
-#define ACTIVATED 20        // 20 Degrees of Bar
+#define ACTIVATED 60        // 60 Degrees of Bar
 
 // Bar
 #define LOWEST_POS 1        // 1" from floor
@@ -155,44 +155,41 @@ int main()
             System_Ready();
         }
 
-//                Delay_Milli_Sec(3000);
-//                motor.dutycycle_pwm = 0.25;
-//                Set_Duty_Cycle();
+                Delay_Milli_Sec(3000);
+                motor.dutycycle_pwm = 0.25;
+                Set_Duty_Cycle();
+
+                Delay_Milli_Sec(3000);
+                motor.dutycycle_pwm = 0.50;
+                Set_Duty_Cycle();
+
+                Delay_Milli_Sec(3000);
+                motor.dutycycle_pwm = 0.75;
+                Set_Duty_Cycle();
+
+                Delay_Milli_Sec(3000);
+                motor.dutycycle_pwm = 0.50;
+                Set_Duty_Cycle();
+
+//        if (sensor.distance_bar_inch <= LOWEST_POS)
+//            count.direction_bar = UP; // Bar trying to go up now
 //
-//                Delay_Milli_Sec(3000);
-//                motor.dutycycle_pwm = 0.50;
-//                Set_Duty_Cycle();
+//        while (count.direction_bar == UP)
+//        {
+//            sensor.copy_bar_inch = sensor.distance_bar_inch;
+//            Delay_Milli_Sec(500);
+//            if (sensor.copy_bar_inch + 0.5 >= sensor.distance_bar_inch)
+//            {
+//                T4CONbits.TON = ON;  // Turn On Timer
+//                _PTEN = ON;          // Turn On PWM
 //
-//                Delay_Milli_Sec(3000);
-//                motor.dutycycle_pwm = 0.75;
-//                Set_Duty_Cycle();
+//                Position_PID(); // Control PWM
 //
-//                Delay_Milli_Sec(3000);
-//                motor.dutycycle_pwm = 0.50;
-//                Set_Duty_Cycle();
-
-        if (sensor.distance_bar_inch <= LOWEST_POS)
-            count.direction_bar = UP; // Bar trying to go up now
-
-        while (count.direction_bar == UP)
-        {
-            sensor.copy_bar_inch = sensor.distance_bar_inch;
-            Delay_Milli_Sec(500);
-            if (sensor.copy_bar_inch + 0.5 >= sensor.distance_bar_inch)
-            {
-                T4CONbits.TON = ON;  // Turn On Timer
-                _PTEN = ON;          // Turn On PWM
-
-                while (count.direction_bar == UP)
-                {
-                    Position_PID(); // Control PWM
-                }
-
-                T4CONbits.TON = OFF;  // Turn off Timer
-                _PTEN = OFF;          // Turn off PWM
-            }
-
-        }   // End While
+//                T4CONbits.TON = OFF;  // Turn off Timer
+//                _PTEN = OFF;          // Turn off PWM
+//            }
+//
+//        }   // End While
     }  // End While
 
 } // End Main
@@ -206,12 +203,20 @@ int main()
 void Position_PID(void)  // Set at 100 Hz
 {
 
-    pid.error_kp = DESIRED_POS - sensor.distance_bar_inch;
+    while (count.direction_bar == UP)
+    {
+
+        pid.error_kp = DESIRED_POS - sensor.distance_bar_inch;
+
+        
+        Delay_Milli_Sec(3000);
+        motor.dutycycle_pwm = 0.25;
+        Set_Duty_Cycle();        
+        
+    }
     
-
-
-
-
+    count.direction_bar = DOWN;
+    
 }
 
 
@@ -349,7 +354,7 @@ void Display_LCD (void)
         // Dependent on user input (button press) for LCD display
         switch (count.input_user)
         {
-            case 0:
+            case 0:  // # of counts per revolution
                 if (count.copy_input_user != 10)
                 {
                 sprintf(lcd.line1, "%s", "# of CPR");
@@ -365,7 +370,7 @@ void Display_LCD (void)
                     for (count.i=count.digits ; count.i<8 ; ++count.i) {Send_Data_Byte(lcd.line2[count.i] = ' ');}
             break;
 
-            case 1:
+            case 1:  // # of Revolutions
                 if (count.copy_input_user != 10)
                 {
                 sprintf(lcd.line1, "%s", "# of REV");
@@ -381,7 +386,7 @@ void Display_LCD (void)
                     for (count.i=count.digits ; count.i<8 ; ++count.i) {Send_Data_Byte(lcd.line2[count.i] = ' ');}                   
             break;
 
-            case 2:
+            case 2:  // Height of bar in inches
                 if (count.copy_input_user != 10)
                 {
                 sprintf(lcd.line1, "%s", "# INCHES");
@@ -395,7 +400,7 @@ void Display_LCD (void)
                     for (count.i=0 ; count.i<4 ; ++count.i) {Send_Data_Byte(lcd.line2[count.i]);}
             break;
 
-            case 3:
+            case 3:  // Angle of bar in degrees
                 if (count.copy_input_user != 10)
                 {
                 sprintf(lcd.line1, "%s", "Bar DEG ");
@@ -406,10 +411,10 @@ void Display_LCD (void)
 
                 sprintf(lcd.line2, "%f", sensor.degree_bar);
                     Send_Command_Byte(GO_LINE2);
-                    for (count.i=0 ; count.i<3 ; ++count.i) {Send_Data_Byte(lcd.line2[count.i]);}
+                    for (count.i=0 ; count.i<8 ; ++count.i) {Send_Data_Byte(lcd.line2[count.i]);}
             break;
 
-            case 4:
+            case 4:  // Motor Rotations Per Minute
                 if (count.copy_input_user != 10)
                 {
                 sprintf(lcd.line1, "%s", "Mot RPM ");
@@ -423,7 +428,7 @@ void Display_LCD (void)
                     for (count.i=0 ; count.i<5 ; ++count.i) {Send_Data_Byte(lcd.line2[count.i]);}        
             break;
 
-            case 5:
+            case 5:  // Motor Speed
                 if (count.copy_input_user != 10)
                 {
                 sprintf(lcd.line1, "%s", "Mot SPD ");
@@ -433,14 +438,12 @@ void Display_LCD (void)
                 }
 
                 sprintf(lcd.line2, "%d", (motor.speed));
-                    count.digits = Get_Digits(motor.speed);
                     Send_Command_Byte(GO_LINE2);
-                    for (count.i=0 ; count.i<count.digits ; ++count.i) {Send_Data_Byte(lcd.line2[count.i]);}
-                    for (count.i=count.digits ; count.i<8 ; ++count.i) {Send_Data_Byte(lcd.line2[count.i] = ' ');}
+                    for (count.i=0 ; count.i<8 ; ++count.i) {Send_Data_Byte(lcd.line2[count.i]);}
             break;
 
 
-            case 6:
+            case 6:  // Current throught Motor (Branch B)
                 if (count.copy_input_user != 10)
                 {
                 sprintf(lcd.line1, "%s", "Mot I -B");
@@ -455,7 +458,7 @@ void Display_LCD (void)
             break;
 
 
-            case 7:
+            case 7:  // Current through Motor (Branch A)
                 if (count.copy_input_user != 10)
                 {
                 sprintf(lcd.line1, "%s", "Mot I -A");
@@ -483,12 +486,12 @@ void Set_Duty_Cycle(void)
     
     if (motor.direction == CW)  // Clockwise
     {
-        PDC2 = RESOLUTION_PWM - DEAD_TIME - (RESOLUTION_PWM * motor.dutycycle_pwm);
+        PDC1 = RESOLUTION_PWM - DEAD_TIME - (RESOLUTION_PWM * motor.dutycycle_pwm);
     }
     
     if (motor.direction == CCW)  // Counter-Clockwise
     {
-        PDC2 = RESOLUTION_PWM + DEAD_TIME + (RESOLUTION_PWM * motor.dutycycle_pwm);
+        PDC1 = RESOLUTION_PWM + DEAD_TIME + (RESOLUTION_PWM * motor.dutycycle_pwm);
     }
     
 }
@@ -582,9 +585,7 @@ void Sensor_Angle(void)
 
     // Get Angle of Lifting Bar
     sensor.data_accel = Read_Analog_Channel(6);
-    sensor.degree_bar = (sensor.data_accel * 0.6369) - 182;
-
-    // sensor.degree_bar = (100/157) * sensor.data_accel - 182 degrees
+    sensor.degree_bar = -((int)(sensor.data_accel) - 390); // -300 for 90 degree
 
 }
 
@@ -598,7 +599,7 @@ void Sensor_Angle(void)
 void InitPins(void)
 {
     // PINS
-    TRISD = 0b0000; // RD0-3: Outputs - LCD (18,22,19,23)
+    TRISD = 0b0001; // RD1-3: Outputs - LCD (18,22,19), RD0: Input - User (23)
     TRISB = 0xFFF0; // RB0-3: Outputs - LCD (2,3,4,5)
     _TRISF0 = 0;    // RF0: Output - Green LED (30)
     _TRISF1 = 0;    // RF1: Output - Yellow LED (29)
@@ -606,8 +607,7 @@ void InitPins(void)
     _TRISF5 = 1;    // RF5: Input - Reset (27)
     _TRISC13 = 0;   // RC13: Digital Output - UltraSonic Trigger (15)
     _TRISC14 = 1;   // RC14: Input - UltraSonic Echo (16)
-    TRISBbits.TRISB8 = 1;    // RB8: Input - Reset Variables on LCD (10)
-    TRISE = 0b001100;        // Set PWM2 pins as Outputs
+    TRISE = 0b000011;        // Set PWM1 pins as Outputs
 
 }
 
@@ -616,9 +616,9 @@ void InitAD(void)
 
     // Configure A/D Converter
 
-    ADPCFGbits.PCFG4 = 1;    // QEA: Input - Encoder Channel A (6)
-    ADPCFGbits.PCFG5 = 1;    // QEB: Input - Encoder Channel B (7)
-    ADPCFGbits.PCFG6 = 0;    // AN6: Input - Accelermoter Z - (8)
+    ADPCFGbits.PCFG4 = 1;    // QEA: Output - Encoder Channel A (6)
+    ADPCFGbits.PCFG5 = 1;    // QEB: Output - Encoder Channel B (7)
+    ADPCFGbits.PCFG6 = 0;    // AN6: Input - Accelermoter X - (8)
     ADPCFGbits.PCFG7 = 0;    // AN7: Input - Current Monitor A (9)
     ADPCFGbits.PCFG8 = 0;    // AN8: Input - Current Monitor B (10)
 
@@ -755,13 +755,12 @@ void InitPWM(void) // PWM
     OVDCON = 0;         // Disable all PWM outputs
     PTMR = 0;           // Timer counts up, Clears timer register
     PTPER = 1023;       // PWM timer for 30MIPS @ 29.296 kHZ
-    PWMCON1 = 0x0022;   // Set CH. 2 to PWM and make Complementary
+    PWMCON1 = 0x0011;   // Set CH. 1 to PWM and make Complementary
     DTCON1 = 0;         // Sets Dead Time to 0 with no Pre-Scalers
     DTCON1bits.DTAPS = 0; // Sets Clock Period = TCY
     DTCON1bits.DTA = 9;   // Sets Dead Time to 300ns
     OVDCON = 0x0F00;      // Output is controlled by PWM Generator
-//  PDC1 = PTPER;         // Sets PWM1 Duty Cycle to 50%
-    PDC2 = 924;           // Sets PWM2 Duty Cycle to CW 10%
+    PDC1 = 924;           // Sets PWM1 Duty Cycle to 10%
 
 //    IFS2bits.PWMIF = 0;       // Clear PWM Interrupt
 //    IEC2bits.PWMIE = 1;       // Enable PWM Interrupts
